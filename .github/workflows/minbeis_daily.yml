@@ -1,31 +1,92 @@
 name: MINBEIS Daily Run
 
 on:
+  push:
+    branches:
+      - minbeis-automation-v1
+    paths:
+      - "minbeis_automation_v1/**"
+      - ".github/workflows/minbeis_daily.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "minbeis_automation_v1/**"
+      - ".github/workflows/minbeis_daily.yml"
   schedule:
-    # 18:30 Athens during summer is 15:30 UTC. Adjust manually for winter or use external scheduler.
+    # 18:30 Athens during summer is 15:30 UTC. Production scheduling will later be timezone-safe.
     - cron: "30 15 * * 1-5"
   workflow_dispatch:
 
 jobs:
-  run-minbeis:
+  validate-engine:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: minbeis_automation_v1/requirements.txt
 
-      - name: Install
+      - name: Install dependencies
         working-directory: minbeis_automation_v1
         run: pip install -r requirements.txt
 
-      - name: Run dry-run
+      - name: Compile Python sources
+        working-directory: minbeis_automation_v1
+        run: python -m compileall -q src tests run_minbeis.py
+
+      - name: Run unit tests
+        working-directory: minbeis_automation_v1
+        run: python -m pytest -q
+
+      - name: Run deterministic MINBEIS fixture
+        working-directory: minbeis_automation_v1
+        run: python run_minbeis.py --dry-run --fixture
+
+      - name: Verify safety output
+        working-directory: minbeis_automation_v1
+        run: |
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+
+          files = sorted(Path("output").glob("broker_export_*.csv"))
+          if not files:
+              raise SystemExit("No broker export generated")
+
+          with files[-1].open(encoding="utf-8") as f:
+              rows = list(csv.DictReader(f))
+
+          if not rows:
+              raise SystemExit("Broker export is empty")
+
+          forbidden = [r for r in rows if r["human_approval"] != "REQUIRED" or r["broker_executed"] != "NO"]
+          if forbidden:
+              raise SystemExit("Human approval boundary violated")
+
+          print(f"Verified {len(rows)} safety-controlled broker rows")
+          PY
+
+      - name: Live delayed/public data smoke test
+        id: live_smoke
+        continue-on-error: true
         working-directory: minbeis_automation_v1
         run: python run_minbeis.py --dry-run
 
-      # For real Google Sheet writeback later:
-      # 1. Add service account JSON as GitHub secret.
-      # 2. Write it to a file in this workflow.
-      # 3. Set GOOGLE_APPLICATION_CREDENTIALS.
-      # 4. Run: python run_minbeis.py --writeback
+      - name: Record live smoke status
+        working-directory: minbeis_automation_v1
+        run: echo "live_smoke_outcome=${{ steps.live_smoke.outcome }}" > output/live_smoke_status.txt
+
+      - name: Upload MINBEIS run artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: minbeis-run-output
+          path: minbeis_automation_v1/output/
+          if-no-files-found: error
+          retention-days: 14
