@@ -18,6 +18,7 @@ class Asset:
     active: bool
     risk_flag: str = ""
     reason: str = ""
+    aliases: List[str] = field(default_factory=list)
 
 
 @dataclass
