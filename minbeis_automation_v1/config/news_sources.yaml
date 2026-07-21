@@ -1,0 +1,16 @@
+sources:
+  - name: "Reuters Business"
+    type: "rss"
+    url: "https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best"
+
+  - name: "Euronext Athens Announcements"
+    type: "manual_or_future_adapter"
+    url: "https://athens.euronext.com"
+
+  - name: "Company IR / official announcements"
+    type: "manual_or_future_adapter"
+    url: "official company investor relations pages"
+
+  - name: "Greek financial press watch"
+    type: "manual_or_future_adapter"
+    url: "Mononews / BankingNews / Euro2day etc."
