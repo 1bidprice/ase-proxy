@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - minbeis-automation-v1
+      - minbeis-sheets-writeback
     paths:
       - "minbeis_automation_v1/**"
       - ".github/workflows/minbeis_daily.yml"
@@ -14,9 +15,16 @@ on:
       - "minbeis_automation_v1/**"
       - ".github/workflows/minbeis_daily.yml"
   schedule:
-    # 18:30 Athens during summer is 15:30 UTC. Production scheduling will later be timezone-safe.
+    # 18:30 Athens during summer = 15:30 UTC.
     - cron: "30 15 * * 1-5"
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SPREADSHEET_ID: "1LnWr8AY9uYMsw93VArfiRfbu75Aod5Z1hAv9mOYHOYo"
+  GOOGLE_SECRET_AVAILABLE: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON != '' }}
 
 jobs:
   validate-engine:
@@ -95,6 +103,44 @@ jobs:
       - name: Record live smoke status
         working-directory: minbeis_automation_v1
         run: echo "live_smoke_outcome=${{ steps.live_smoke.outcome }}" > output/live_smoke_status.txt
+
+      - name: Configure Google credentials securely
+        if: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && env.GOOGLE_SECRET_AVAILABLE == 'true' && steps.live_smoke.outcome == 'success' }}
+        env:
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          umask 077
+          printf '%s' "$GCP_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/minbeis-service-account.json"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ["RUNNER_TEMP"]) / "minbeis-service-account.json"
+          data = json.loads(path.read_text(encoding="utf-8"))
+          required = {"type", "project_id", "private_key", "client_email", "token_uri"}
+          missing = required - set(data)
+          if missing:
+              raise SystemExit(f"Service-account JSON missing fields: {sorted(missing)}")
+          if data.get("type") != "service_account":
+              raise SystemExit("Credential is not a service-account JSON key")
+          print("Service-account JSON validated without exposing secret values")
+          PY
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/minbeis-service-account.json" >> "$GITHUB_ENV"
+          echo "MINBEIS_WRITEBACK=true" >> "$GITHUB_ENV"
+
+      - name: Write live MINBEIS results to Google Sheet
+        if: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && env.GOOGLE_SECRET_AVAILABLE == 'true' && steps.live_smoke.outcome == 'success' }}
+        working-directory: minbeis_automation_v1
+        run: python run_minbeis.py --writeback
+
+      - name: Explain skipped writeback
+        if: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && env.GOOGLE_SECRET_AVAILABLE != 'true' }}
+        run: echo "Google Sheet writeback skipped because GOOGLE_SERVICE_ACCOUNT_JSON secret is not configured."
+
+      - name: Remove temporary Google credential
+        if: always()
+        run: rm -f "$RUNNER_TEMP/minbeis-service-account.json"
 
       - name: Upload MINBEIS run artifacts
         if: always()
