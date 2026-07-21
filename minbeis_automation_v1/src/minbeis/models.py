@@ -35,6 +35,48 @@ class MarketSnapshot:
 
 
 @dataclass
+class FundamentalSnapshot:
+    ticker: str
+    source: str
+    ok: bool
+    market_cap: Optional[float] = None
+    trailing_pe: Optional[float] = None
+    forward_pe: Optional[float] = None
+    price_to_book: Optional[float] = None
+    enterprise_to_ebitda: Optional[float] = None
+    profit_margins: Optional[float] = None
+    return_on_equity: Optional[float] = None
+    revenue_growth: Optional[float] = None
+    earnings_growth: Optional[float] = None
+    free_cashflow: Optional[float] = None
+    total_debt: Optional[float] = None
+    total_cash: Optional[float] = None
+    currency: Optional[str] = None
+    error: Optional[str] = None
+
+
+@dataclass
+class TechnicalSnapshot:
+    ticker: str
+    source: str
+    ok: bool
+    last_price: Optional[float] = None
+    sma20: Optional[float] = None
+    sma50: Optional[float] = None
+    low20: Optional[float] = None
+    atr14: Optional[float] = None
+    avg_volume20: Optional[float] = None
+    current_volume: Optional[float] = None
+    distance_from_sma20_pct: Optional[float] = None
+    entry_zone_low: Optional[float] = None
+    entry_zone_high: Optional[float] = None
+    stop_price: Optional[float] = None
+    stop_distance_pct: Optional[float] = None
+    setup_status: str = "UNKNOWN"
+    error: Optional[str] = None
+
+
+@dataclass
 class NewsItem:
     source: str
     title: str
@@ -55,6 +97,11 @@ class ScoreResult:
     status: str
     score: int
     notes: str
+    entry_zone: str = "N/A"
+    invalidation: str = "N/A"
+    stop_distance_pct: Optional[float] = None
+    suggested_probe_allocation_pct: float = 0.0
+    max_loss_pct_of_portfolio: float = 0.0
 
 
 @dataclass
