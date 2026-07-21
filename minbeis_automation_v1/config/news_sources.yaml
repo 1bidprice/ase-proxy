@@ -1,11 +1,27 @@
 sources:
+  - name: "Euronext Athens - Issuer Announcements"
+    type: "rss"
+    url: "https://athens.euronext.com/en/rss/issuer-announcements"
+
+  - name: "Euronext Athens - Corporate Actions"
+    type: "rss"
+    url: "https://athens.euronext.com/en/rss/corporate-actions"
+
+  - name: "Euronext Athens - Financial Data"
+    type: "rss"
+    url: "https://athens.euronext.com/en/rss/financial-data"
+
+  - name: "Euronext Athens - Market Notices"
+    type: "rss"
+    url: "https://athens.euronext.com/en/rss/market-notices"
+
+  - name: "Euronext Athens - Full Feed"
+    type: "rss"
+    url: "https://athens.euronext.com/en/rss/full-feed"
+
   - name: "Reuters Business"
     type: "rss"
     url: "https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best"
-
-  - name: "Euronext Athens Announcements"
-    type: "manual_or_future_adapter"
-    url: "https://athens.euronext.com"
 
   - name: "Company IR / official announcements"
     type: "manual_or_future_adapter"
