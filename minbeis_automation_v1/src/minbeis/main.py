@@ -1,0 +1,139 @@
+from __future__ import annotations
+
+from datetime import datetime
+from pathlib import Path
+import argparse
+import json
+import os
+
+from .config import load_env, load_universe, load_news_sources, get_setting
+from .market_data import fetch_market_snapshots
+from .fundamentals import fetch_fundamental_snapshots
+from .technical import fetch_technical_snapshots
+from .news_intake import fetch_rss_news
+from .fixture_data import (
+    fixture_market_snapshots,
+    fixture_news_items,
+    fixture_fundamental_snapshots,
+    fixture_technical_snapshots,
+)
+from .scoring import score_asset
+from .buy_engine import build_buy_plan
+from .broker_export import write_broker_export
+from .sheet_writer import write_run_log, write_candidate_buy_plans, write_broker_export_sheet
+
+
+def run(dry_run: bool = True, fixture_mode: bool = False) -> dict:
+    load_env()
+
+    spreadsheet_id = get_setting("SPREADSHEET_ID")
+    writeback_enabled = get_setting("MINBEIS_WRITEBACK", "false").lower() == "true"
+    fixture_mode = fixture_mode or get_setting("MINBEIS_FIXTURE_MODE", "false").lower() == "true"
+    run_id = f"RUN-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}"
+
+    assets = load_universe()
+
+    if fixture_mode:
+        snapshots = fixture_market_snapshots(assets)
+        fundamentals = fixture_fundamental_snapshots(assets)
+        technicals = fixture_technical_snapshots(assets)
+        news_items = fixture_news_items()
+        data_mode = "FIXTURE"
+    else:
+        news_sources = load_news_sources()
+        snapshots = fetch_market_snapshots(assets)
+        fundamentals = fetch_fundamental_snapshots(assets)
+        technicals = fetch_technical_snapshots(assets)
+        news_items = fetch_rss_news(news_sources, assets)
+        data_mode = "LIVE_DELAYED_PUBLIC"
+
+    snapshot_map = {s.ticker: s for s in snapshots}
+    fundamental_map = {s.ticker: s for s in fundamentals}
+    technical_map = {s.ticker: s for s in technicals}
+
+    scores = {}
+    plans = []
+
+    for asset in assets:
+        snapshot = snapshot_map.get(asset.ticker)
+        fundamental = fundamental_map.get(asset.ticker)
+        technical = technical_map.get(asset.ticker)
+        if snapshot is None or fundamental is None or technical is None:
+            raise RuntimeError(f"Missing data bundle for {asset.ticker}")
+        score = score_asset(asset, snapshot, news_items, fundamental=fundamental, technical=technical)
+        plan = build_buy_plan(asset, score)
+        scores[asset.ticker] = score
+        plans.append(plan)
+
+    out_dir = Path("output")
+    out_dir.mkdir(exist_ok=True)
+
+    broker_path = write_broker_export(plans, out_dir / f"broker_export_{run_id}.csv")
+
+    summary = {
+        "run_id": run_id,
+        "timestamp": datetime.utcnow().isoformat(),
+        "data_mode": data_mode,
+        "assets_checked": len(assets),
+        "news_items_matched": len(news_items),
+        "buy_probe_count": sum(p.action == "BUY PROBE" for p in plans),
+        "paper_buy_count": sum(p.action == "PAPER BUY" for p in plans),
+        "no_buy_count": sum(p.action == "NO BUY" for p in plans),
+        "plans": [
+            {
+                "ticker": p.ticker,
+                "asset": p.asset_name,
+                "action": p.action,
+                "allocation_pct": p.suggested_allocation_pct,
+                "entry_zone": p.entry_zone,
+                "invalidation": p.invalidation,
+                "risk_status": p.risk_status,
+                "reason": p.reason[:600],
+            }
+            for p in plans
+        ],
+        "broker_export_path": str(broker_path),
+        "writeback_enabled": writeback_enabled,
+        "dry_run": dry_run,
+    }
+
+    (out_dir / f"summary_{run_id}.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    if writeback_enabled and not dry_run:
+        if fixture_mode:
+            raise RuntimeError("Fixture mode is forbidden for Google Sheet writeback")
+        if not spreadsheet_id:
+            raise RuntimeError("SPREADSHEET_ID missing")
+        write_candidate_buy_plans(spreadsheet_id, plans, scores)
+        write_broker_export_sheet(spreadsheet_id, plans)
+        write_run_log(spreadsheet_id, run_id, output="Completed with Google Sheet writeback", errors="")
+    else:
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+
+    return summary
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Run MINBEIS Automation Engine v1")
+    parser.add_argument("--dry-run", action="store_true", help="Run without Google Sheet writeback")
+    parser.add_argument("--writeback", action="store_true", help="Run with Google Sheet writeback if credentials exist")
+    parser.add_argument("--fixture", action="store_true", help="Use deterministic fixture data for CI/testing")
+    args = parser.parse_args()
+
+    dry_run = True
+    if args.writeback:
+        dry_run = False
+        os.environ["MINBEIS_WRITEBACK"] = "true"
+
+    if args.dry_run:
+        dry_run = True
+        os.environ["MINBEIS_WRITEBACK"] = "false"
+
+    run(dry_run=dry_run, fixture_mode=args.fixture)
+
+
+if __name__ == "__main__":
+    main()
