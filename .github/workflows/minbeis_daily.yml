@@ -21,7 +21,7 @@ on:
 jobs:
   validate-engine:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -48,7 +48,7 @@ jobs:
         working-directory: minbeis_automation_v1
         run: python run_minbeis.py --dry-run --fixture
 
-      - name: Verify safety output
+      - name: Verify BUY PROBE and safety boundaries
         working-directory: minbeis_automation_v1
         run: |
           python - <<'PY'
@@ -65,11 +65,25 @@ jobs:
           if not rows:
               raise SystemExit("Broker export is empty")
 
-          forbidden = [r for r in rows if r["human_approval"] != "REQUIRED" or r["broker_executed"] != "NO"]
-          if forbidden:
+          boundary_violations = [
+              r for r in rows
+              if r["human_approval"] != "REQUIRED" or r["broker_executed"] != "NO"
+          ]
+          if boundary_violations:
               raise SystemExit("Human approval boundary violated")
 
-          print(f"Verified {len(rows)} safety-controlled broker rows")
+          probes = [r for r in rows if r["action"] == "BUY PROBE"]
+          if not probes:
+              raise SystemExit("Engine failed to generate a controlled BUY PROBE in fixture mode")
+
+          for probe in probes:
+              allocation = float(probe["suggested_allocation"].rstrip("%"))
+              if not 0.25 <= allocation <= 0.75:
+                  raise SystemExit(f"Probe allocation outside allowed range: {allocation}%")
+              if probe["entry_zone"] == "N/A" or probe["invalidation"] == "N/A":
+                  raise SystemExit("BUY PROBE missing entry zone or invalidation")
+
+          print(f"Verified {len(rows)} rows and {len(probes)} controlled BUY PROBE plan(s)")
           PY
 
       - name: Live delayed/public data smoke test
