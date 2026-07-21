@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import Iterable
-import feedparser
 
 from .models import Asset, NewsItem
 
@@ -21,6 +20,8 @@ def _match_tickers(text: str, assets: Iterable[Asset]) -> list[str]:
 
 
 def fetch_rss_news(sources: list[dict], assets: list[Asset], max_items_per_source: int = 20) -> list[NewsItem]:
+    import feedparser
+
     items: list[NewsItem] = []
 
     for source in sources:
