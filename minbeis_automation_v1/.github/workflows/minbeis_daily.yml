@@ -1,0 +1,29 @@
+name: MINBEIS Daily Run
+
+on:
+  schedule:
+    # 18:30 Athens during summer is 15:30 UTC. Adjust manually for winter or use external scheduler.
+    - cron: "30 15 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  run-minbeis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Run dry-run
+        run: python run_minbeis.py --dry-run
+
+      # For real Google Sheet writeback:
+      # 1. Add service account JSON as GitHub secret.
+      # 2. Write it to a file in this workflow.
+      # 3. Set GOOGLE_APPLICATION_CREDENTIALS.
+      # 4. Run: python run_minbeis.py --writeback
