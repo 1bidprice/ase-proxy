@@ -1,6 +1,7 @@
 universe:
   - ticker: "ALPHA.AT"
     name: "Alpha Bank"
+    aliases: ["ALPHA BANK", "ALPHA SERVICES AND HOLDINGS", "ΑΛΦΑ", "ALPHA"]
     market: "Euronext Athens"
     sector: "Banks"
     priority: "High"
@@ -10,6 +11,7 @@ universe:
 
   - ticker: "ETE.AT"
     name: "National Bank of Greece"
+    aliases: ["NATIONAL BANK OF GREECE", "NBG", "ΕΘΝΙΚΗ ΤΡΑΠΕΖΑ", "ΕΤΕ"]
     market: "Euronext Athens"
     sector: "Banks"
     priority: "High"
@@ -19,6 +21,7 @@ universe:
 
   - ticker: "EUROB.AT"
     name: "Eurobank"
+    aliases: ["EUROBANK", "EUROBANK ERGASIAS", "EUROBANK HOLDINGS", "ΕΥΡΩΒΑΝΚ"]
     market: "Euronext Athens"
     sector: "Banks"
     priority: "High"
@@ -28,6 +31,7 @@ universe:
 
   - ticker: "TPEIR.AT"
     name: "Piraeus Bank"
+    aliases: ["PIRAEUS BANK", "PIRAEUS FINANCIAL HOLDINGS", "ΤΡΑΠΕΖΑ ΠΕΙΡΑΙΩΣ", "ΠΕΙΡΑΙΩΣ"]
     market: "Euronext Athens"
     sector: "Banks"
     priority: "High"
@@ -37,6 +41,7 @@ universe:
 
   - ticker: "AKTR.AT"
     name: "AKTOR"
+    aliases: ["AKTOR", "ΑΚΤΩΡ", "AKTOR GROUP", "INTRAKAT"]
     market: "Euronext Athens"
     sector: "Infrastructure / Construction"
     priority: "High"
@@ -46,6 +51,7 @@ universe:
 
   - ticker: "STM"
     name: "STMicroelectronics"
+    aliases: ["STMICROELECTRONICS", "STMICRO", "STM"]
     market: "NYSE / EU"
     sector: "Semiconductors / AI infrastructure"
     priority: "Medium"
