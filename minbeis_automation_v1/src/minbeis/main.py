@@ -8,8 +8,15 @@ import os
 
 from .config import load_env, load_universe, load_news_sources, get_setting
 from .market_data import fetch_market_snapshots
+from .fundamentals import fetch_fundamental_snapshots
+from .technical import fetch_technical_snapshots
 from .news_intake import fetch_rss_news
-from .fixture_data import fixture_market_snapshots, fixture_news_items
+from .fixture_data import (
+    fixture_market_snapshots,
+    fixture_news_items,
+    fixture_fundamental_snapshots,
+    fixture_technical_snapshots,
+)
 from .scoring import score_asset
 from .buy_engine import build_buy_plan
 from .broker_export import write_broker_export
@@ -28,23 +35,32 @@ def run(dry_run: bool = True, fixture_mode: bool = False) -> dict:
 
     if fixture_mode:
         snapshots = fixture_market_snapshots(assets)
+        fundamentals = fixture_fundamental_snapshots(assets)
+        technicals = fixture_technical_snapshots(assets)
         news_items = fixture_news_items()
         data_mode = "FIXTURE"
     else:
         news_sources = load_news_sources()
         snapshots = fetch_market_snapshots(assets)
+        fundamentals = fetch_fundamental_snapshots(assets)
+        technicals = fetch_technical_snapshots(assets)
         news_items = fetch_rss_news(news_sources, assets)
         data_mode = "LIVE_DELAYED_PUBLIC"
 
     snapshot_map = {s.ticker: s for s in snapshots}
+    fundamental_map = {s.ticker: s for s in fundamentals}
+    technical_map = {s.ticker: s for s in technicals}
+
     scores = {}
     plans = []
 
     for asset in assets:
         snapshot = snapshot_map.get(asset.ticker)
-        if snapshot is None:
-            raise RuntimeError(f"Missing market snapshot for {asset.ticker}")
-        score = score_asset(asset, snapshot, news_items)
+        fundamental = fundamental_map.get(asset.ticker)
+        technical = technical_map.get(asset.ticker)
+        if snapshot is None or fundamental is None or technical is None:
+            raise RuntimeError(f"Missing data bundle for {asset.ticker}")
+        score = score_asset(asset, snapshot, news_items, fundamental=fundamental, technical=technical)
         plan = build_buy_plan(asset, score)
         scores[asset.ticker] = score
         plans.append(plan)
@@ -60,14 +76,19 @@ def run(dry_run: bool = True, fixture_mode: bool = False) -> dict:
         "data_mode": data_mode,
         "assets_checked": len(assets),
         "news_items_matched": len(news_items),
+        "buy_probe_count": sum(p.action == "BUY PROBE" for p in plans),
+        "paper_buy_count": sum(p.action == "PAPER BUY" for p in plans),
+        "no_buy_count": sum(p.action == "NO BUY" for p in plans),
         "plans": [
             {
                 "ticker": p.ticker,
                 "asset": p.asset_name,
                 "action": p.action,
                 "allocation_pct": p.suggested_allocation_pct,
+                "entry_zone": p.entry_zone,
+                "invalidation": p.invalidation,
                 "risk_status": p.risk_status,
-                "reason": p.reason[:300],
+                "reason": p.reason[:600],
             }
             for p in plans
         ],
