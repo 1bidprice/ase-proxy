@@ -35,6 +35,7 @@ def load_universe(path: Path | None = None) -> list[Asset]:
                 active=bool(item.get("active", True)),
                 risk_flag=item.get("risk_flag", ""),
                 reason=item.get("reason", ""),
+                aliases=list(item.get("aliases", [])),
             )
         )
     return [a for a in assets if a.active]
