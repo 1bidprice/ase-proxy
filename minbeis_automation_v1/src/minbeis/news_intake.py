@@ -6,23 +6,25 @@ from .models import Asset, NewsItem
 
 
 def _match_tickers(text: str, assets: Iterable[Asset]) -> list[str]:
-    text_l = text.lower()
+    text_l = text.casefold()
     matched = []
     for asset in assets:
         token_candidates = {
-            asset.ticker.lower(),
-            asset.name.lower(),
-            asset.name.split()[0].lower(),
+            asset.ticker.casefold(),
+            asset.name.casefold(),
+            asset.name.split()[0].casefold(),
+            *(alias.casefold() for alias in asset.aliases),
         }
         if any(token and token in text_l for token in token_candidates):
             matched.append(asset.ticker)
     return sorted(set(matched))
 
 
-def fetch_rss_news(sources: list[dict], assets: list[Asset], max_items_per_source: int = 20) -> list[NewsItem]:
+def fetch_rss_news(sources: list[dict], assets: list[Asset], max_items_per_source: int = 40) -> list[NewsItem]:
     import feedparser
 
     items: list[NewsItem] = []
+    seen_links: set[str] = set()
 
     for source in sources:
         if source.get("type") != "rss":
@@ -32,9 +34,13 @@ def fetch_rss_news(sources: list[dict], assets: list[Asset], max_items_per_sourc
         for entry in feed.entries[:max_items_per_source]:
             title = getattr(entry, "title", "") or ""
             link = getattr(entry, "link", "") or ""
+            summary = getattr(entry, "summary", "") or ""
             published = getattr(entry, "published", None)
 
-            matched = _match_tickers(f"{title} {link}", assets)
+            if link and link in seen_links:
+                continue
+
+            matched = _match_tickers(f"{title} {summary} {link}", assets)
             if matched:
                 items.append(
                     NewsItem(
@@ -45,5 +51,7 @@ def fetch_rss_news(sources: list[dict], assets: list[Asset], max_items_per_sourc
                         matched_tickers=matched,
                     )
                 )
+                if link:
+                    seen_links.add(link)
 
     return items
