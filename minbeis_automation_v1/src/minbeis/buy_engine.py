@@ -4,43 +4,42 @@ from .models import Asset, ScoreResult, BuyPlan
 
 
 def build_buy_plan(asset: Asset, score: ScoreResult) -> BuyPlan:
-    # Safety-first buy engine.
-    # No valuation / no invalidation / no risk cap = no real buy.
-    mandatory_failures = []
-
-    if score.valuation_pass not in {"PASS", "PARTIAL"}:
-        mandatory_failures.append("valuation missing")
+    hard_blocks = []
+    if score.valuation_pass == "FAIL":
+        hard_blocks.append("valuation failed")
+    if score.numbers_pass in {"FAIL", "PENDING"}:
+        hard_blocks.append(f"numbers {score.numbers_pass.lower()}")
     if score.price_setup_pass == "FAIL":
-        mandatory_failures.append("price setup failed")
+        hard_blocks.append("price setup failed")
     if score.invalidation_defined != "YES":
-        mandatory_failures.append("invalidation missing")
+        hard_blocks.append("invalidation missing")
     if score.risk_cap_defined != "YES":
-        mandatory_failures.append("risk cap missing")
+        hard_blocks.append("risk cap missing")
 
-    if mandatory_failures:
+    if hard_blocks:
         return BuyPlan(
             ticker=asset.ticker,
             asset_name=asset.name,
             action="NO BUY",
             suggested_allocation_pct=0.0,
-            max_loss_rule="0€ until valuation, invalidation and risk cap are defined",
-            entry_zone="N/A",
-            invalidation="N/A",
-            reason=f"Blocked: {', '.join(mandatory_failures)}. Notes: {score.notes}",
+            max_loss_rule="0% until all mandatory gates pass",
+            entry_zone=score.entry_zone,
+            invalidation=score.invalidation,
+            reason=f"Blocked: {', '.join(hard_blocks)}. {score.notes}",
             risk_status="BLOCKED",
         )
 
-    if score.score >= 7:
+    if score.price_setup_pass == "PASS" and score.valuation_pass == "PASS" and score.numbers_pass == "PASS" and score.score >= 8:
         return BuyPlan(
             ticker=asset.ticker,
             asset_name=asset.name,
             action="BUY PROBE",
-            suggested_allocation_pct=0.5,
-            max_loss_rule="Max loss must be defined in risk module before export",
-            entry_zone="To be calculated by price module",
-            invalidation="To be calculated by risk module",
-            reason="All essential gates passed for probe position",
-            risk_status="CONTROLLED",
+            suggested_allocation_pct=score.suggested_probe_allocation_pct,
+            max_loss_rule=f"Maximum modeled loss {score.max_loss_pct_of_portfolio:.4f}% of portfolio",
+            entry_zone=score.entry_zone,
+            invalidation=score.invalidation,
+            reason=f"All first-entry gates passed. {score.notes}",
+            risk_status="CONTROLLED_PROBE",
         )
 
     return BuyPlan(
@@ -48,9 +47,9 @@ def build_buy_plan(asset: Asset, score: ScoreResult) -> BuyPlan:
         asset_name=asset.name,
         action="PAPER BUY",
         suggested_allocation_pct=0.0,
-        max_loss_rule="Paper only",
-        entry_zone="Paper plan only",
-        invalidation="Paper plan only",
-        reason="Some gates passed but score not enough for real allocation",
+        max_loss_rule="Paper only; no real capital",
+        entry_zone=score.entry_zone,
+        invalidation=score.invalidation,
+        reason=f"No hard failure, but not enough evidence for real capital. {score.notes}",
         risk_status="PAPER_ONLY",
     )
